@@ -1,0 +1,10 @@
+MarbleDeliveryPro 10.0.5 PUBLIC
+Source privacy audit: PASS
+Regression tests: 10/10 PASS
+Source self-test: PASS (build pipeline)
+Bundled EXE self-test: PASS (build pipeline)
+Portable ZIP integrity/privacy scan: PASS
+Source ZIP integrity/privacy scan: PASS
+Installer build and 3-asset SHA256: PASS
+Installed Setup/uninstall interactive QA: NOT EXECUTED for 10.0.5
+Binary signing: NOT SIGNED
