@@ -43,6 +43,10 @@ Before publishing the source archive, run:
 py -3 tools\verify_public_release.py
 ```
 
+## Publish to GitHub
+
+After building and reviewing the release assets, install GitHub CLI and run `gh auth login`. Then run `powershell -ExecutionPolicy Bypass -File .\PUBLISH_GITHUB.ps1`. The script requires you to type `PUBLISH` before it changes GitHub.
+
 ## License
 
 MIT — see `LICENSE`. A contribution must not contain user data, employee names, API tokens, or licensed third-party assets.
