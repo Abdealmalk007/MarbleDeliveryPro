@@ -1,5 +1,12 @@
 # MarbleDeliveryPro
 
+> **Current license / الترخيص الحالي: All Rights Reserved.**
+> © 2026 Abu Omar / ProTech. Prior written permission is required for use,
+> copying, modification, publication or distribution of current ProTech-owned material.
+> جميع الحقوق محفوظة. يلزم إذن كتابي مسبق للاستخدام أو النسخ أو التعديل أو التوزيع.
+> Third-party licenses and previously distributed MIT copies remain unaffected.
+> See [LICENSE](LICENSE) and [licensing transition](LICENSING_TRANSITION.md).
+
 **Version:** 10.0.5 — Public clean release  
 **Developer:** Abu Omar / ProTech  
 **Platform:** Windows x64 (Python 3.11+ to run source)
@@ -49,12 +56,12 @@ After building and reviewing the release assets, install GitHub CLI and run `gh 
 
 ## License
 
-MIT — see `LICENSE`. A contribution must not contain user data, employee names, API tokens, or licensed third-party assets.
+All Rights Reserved — see `LICENSE`. A contribution must not contain user data, employee names, API tokens, or licensed third-party assets.
 
 **More details:** [README_AR.md](README_AR.md) | [SECURITY.md](SECURITY.md) | [RELEASE_NOTES_AR.md](RELEASE_NOTES_AR.md)
 
-## Official Project Website / Ø§Ù„Ù…ÙˆÙ‚Ø¹ Ø§Ù„Ø±Ø³Ù…ÙŠ
+## Official Project Website / الموقع الرسمي
 
 For features, product status and official download information, see [the Alghad Digital product page](https://alghad.digital/programs/marble/).
 
-Ø§Ù„ØªÙØ§ØµÙŠÙ„ ÙˆØ±ÙˆØ§Ø¨Ø· Ø§Ù„ØªÙ†Ø²ÙŠÙ„ Ø§Ù„Ø±Ø³Ù…ÙŠØ© Ù…ØªØ§Ø­Ø© Ø¹Ø¨Ø± [ØµÙØ­Ø© Ø§Ù„Ø¨Ø±Ù†Ø§Ù…Ø¬ ÙÙŠ Ø§Ù„ØºØ¯ Ø¯ÙŠØ¬ØªØ§Ù„](https://alghad.digital/programs/marble/).
+التفاصيل وروابط التنزيل الرسمية: [صفحة البرنامج](https://alghad.digital/programs/marble/).
