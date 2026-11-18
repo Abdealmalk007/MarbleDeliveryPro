@@ -1,13 +1,6 @@
 # MarbleDeliveryPro
 
-> **Current license / الترخيص الحالي: All Rights Reserved.**
-> © 2026 Abu Omar / ProTech. Prior written permission is required for use,
-> copying, modification, publication or distribution of current ProTech-owned material.
-> جميع الحقوق محفوظة. يلزم إذن كتابي مسبق للاستخدام أو النسخ أو التعديل أو التوزيع.
-> Third-party licenses and previously distributed MIT copies remain unaffected.
-> See [LICENSE](LICENSE) and [licensing transition](LICENSING_TRANSITION.md).
-
-**Version:** 10.0.5 — Public clean release  
+**Version:** 10.0.7 — Public clean release  
 **Developer:** Abu Omar / ProTech  
 **Platform:** Windows x64 (Python 3.11+ to run source)
 
@@ -42,7 +35,7 @@ With Python and Inno Setup 6 installed:
 .\Build_All.ps1
 ```
 
-This runs the unit/regression suite and source/EXE self-tests, then produces `dist/Setup_MarbleDeliveryPro_v10.0.5.exe`, the portable ZIP, and a SHA256 manifest. A code-signing certificate is required to publish a signed binary; unsigned builds may display Windows SmartScreen warnings.
+This runs the unit/regression suite and source/EXE self-tests, then produces `dist/Setup_MarbleDeliveryPro_v10.0.7.exe`, the portable ZIP, and a SHA256 manifest. A code-signing certificate is required to publish a signed binary; unsigned builds may display Windows SmartScreen warnings.
 
 Before publishing the source archive, run:
 
@@ -56,12 +49,6 @@ After building and reviewing the release assets, install GitHub CLI and run `gh 
 
 ## License
 
-All Rights Reserved — see `LICENSE`. A contribution must not contain user data, employee names, API tokens, or licensed third-party assets.
+MIT — see `LICENSE`. A contribution must not contain user data, employee names, API tokens, or licensed third-party assets.
 
 **More details:** [README_AR.md](README_AR.md) | [SECURITY.md](SECURITY.md) | [RELEASE_NOTES_AR.md](RELEASE_NOTES_AR.md)
-
-## Official Project Website / الموقع الرسمي
-
-For features, product status and official download information, see [the Alghad Digital product page](https://alghad.digital/programs/marble/).
-
-التفاصيل وروابط التنزيل الرسمية: [صفحة البرنامج](https://alghad.digital/programs/marble/).

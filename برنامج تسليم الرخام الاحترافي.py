@@ -333,7 +333,7 @@ class FieldDefinition:
             key=str(raw.get("key") or f"custom_{uuid.uuid4().hex[:10]}"),
             label=str(raw.get("label") or "حقل جديد"),
             visible=bool(raw.get("visible", True)),
-            required=bool(raw.get("required", False)),
+            required=False,
             width=max(80, min(320, int(raw.get("width", 145)))),
             kind=str(raw.get("kind", "text")),
             system=bool(raw.get("system", False)),
@@ -344,16 +344,16 @@ class FieldDefinition:
 def default_fields() -> list[FieldDefinition]:
     return [
         FieldDefinition("material_estimate", "تقدير الخامات", width=150),
-        FieldDefinition("contract_number", "رقم العقد", required=True, width=120),
+        FieldDefinition("contract_number", "رقم العقد", required=False, width=120),
         FieldDefinition("kitchen_number", "رقم/اسم المطبخ (اختياري)", visible=False, width=135),
-        FieldDefinition("customer_name", "اسم العميل", required=True, width=190),
-        FieldDefinition("mobile", "رقم الجوال", required=True, width=145, kind="phone"),
+        FieldDefinition("customer_name", "اسم العميل", required=False, width=190),
+        FieldDefinition("mobile", "رقم الجوال", required=False, width=145, kind="phone"),
         FieldDefinition("marble_color", "لون الرخام", width=145),
         FieldDefinition("sink_type", "نوع المجلى", width=145),
         FieldDefinition("marble_edge", "شفة الرخام", width=145),
         FieldDefinition("showroom", "المعرض", width=145),
         FieldDefinition("salesperson", "موظف المعرض", width=175),
-        FieldDefinition("delivery_status", "حالة التسليم", required=True, width=160, kind="choice",
+        FieldDefinition("delivery_status", "حالة التسليم", required=False, width=160, kind="choice",
                         options=["جديد", "يحتاج رفع مقاس", "نهائي لا يحتاج رفع مقاس",
                                  "جاهز للتسليم", "تم التسليم",
                                  "تعديل - يعتمد الحالي ويلغى السابق", "مؤجل", "ملغي"]),
@@ -397,7 +397,7 @@ class AppSettings:
     png_scale_percent: int = 100  # توافق مع الإصدارات السابقة
     report_page_size: str = "A4"
     report_orientation: str = "auto"
-    report_margin_mm: float = 6.0
+    report_margin_mm: float = 4.5
     pdf_base_font_size: float = 10.0
     pdf_min_font_size: float = 7.5
     png_dpi: int = 300
@@ -434,7 +434,7 @@ class AppSettings:
         values["report_orientation"] = str(values.get("report_orientation", "auto")).lower()
         if values["report_orientation"] not in {"auto", "portrait", "landscape"}:
             values["report_orientation"] = "auto"
-        values["report_margin_mm"] = max(3.0, min(20.0, float(values.get("report_margin_mm", 6.0))))
+        values["report_margin_mm"] = max(3.0, min(20.0, float(values.get("report_margin_mm", 4.5))))
         values["pdf_base_font_size"] = max(8.0, min(14.0, float(values.get("pdf_base_font_size", 10.0))))
         values["pdf_min_font_size"] = max(6.5, min(values["pdf_base_font_size"], float(values.get("pdf_min_font_size", 7.5))))
         values["png_dpi"] = max(150, min(600, int(values.get("png_dpi", 300))))
@@ -467,6 +467,7 @@ class AppSettings:
         # ترقية الحقول النظامية مع الحفاظ على الحقول المخصصة وإعدادات المستخدم.
         default_by_key = {item.key: item for item in default_fields()}
         for current in values["fields"]:
+            current.required = False  # Legacy settings migration: every field stays optional.
             default_field = default_by_key.get(current.key)
             if current.key == "delivery_status" and default_field:
                 current.label = default_field.label
@@ -528,7 +529,7 @@ class AppSettings:
 # دوال مساعدة
 # ============================================================================
 APP_NAME = "نظام تسليم الرخام الاحترافي"
-APP_VERSION = "10.0.5"
+APP_VERSION = "10.0.7"
 SCHEMA_VERSION = 14
 STATUS_OPTIONS = (
     "جديد", "يحتاج رفع مقاس", "نهائي لا يحتاج رفع مقاس",
@@ -571,6 +572,32 @@ def report_table_sort_value(value: Any) -> tuple[int, Any]:
     except ValueError:
         pass
     return (2, normalize_search_text(text))
+
+
+def report_dimension_counts(records: list[dict[str, Any]], key: str) -> dict[str, int]:
+    """Use exactly the exported rows and disclose missing values, never guess."""
+    result = Counter()
+    for row in records:
+        value = clean_value(row.get("values", {}).get(key, "")) or "غير محدد"
+        result[value] += 1
+    assert sum(result.values()) == len(records)
+    return dict(sorted(result.items(), key=lambda item: (-item[1], item[0])))
+
+
+def report_dimension_summary(records: list[dict[str, Any]], key: str) -> dict[str, Any]:
+    counts = report_dimension_counts(records, key)
+    leader = next(((name, n) for name, n in counts.items() if name != "غير محدد"),
+                  ("غير محدد", 0))
+    return {"counts": counts, "missing": counts.get("غير محدد", 0),
+            "distinct": len(counts) - int("غير محدد" in counts),
+            "leader": leader, "total": len(records)}
+
+
+REPORT_ANALYSIS_DIMENSIONS: tuple[tuple[str, str], ...] = (
+    ("marble_color", "لون الرخام"), ("sink_type", "نوع المجلى"),
+    ("showroom", "المعرض"), ("salesperson", "موظف المعرض"),
+    ("marble_edge", "شفة الرخام"), ("delivery_status", "حالة التسليم"),
+)
 
 
 def balanced_report_field_groups(fields: list[Any], max_columns: int = 3) -> list[list[Any]]:
@@ -657,7 +684,7 @@ def report_column_weights(fields: list[Any], records: list[dict[str, Any]]) -> l
     """يوزع عرض A4 حسب المحتوى المعتاد مع أولوية واضحة لاسم العميل."""
     layout_hints: dict[str, tuple[float, float, float]] = {
         "customer_name": (21.0, 31.0, 1.30),
-        "salesperson": (12.0, 18.0, 1.02),
+        "salesperson": (13.0, 20.0, 1.07),
         "contract_number": (13.0, 18.0, 1.08),
         "kitchen_number": (10.0, 14.0, 0.95),
         "mobile": (10.5, 14.0, 0.88),
@@ -665,10 +692,10 @@ def report_column_weights(fields: list[Any], records: list[dict[str, Any]]) -> l
         "actual_delivery_date": (12.0, 16.5, 0.94),
         "delivery_status": (14.0, 19.0, 1.08),
         "material_estimate": (8.0, 12.0, 0.82),
-        "marble_color": (9.0, 14.0, 0.92),
-        "sink_type": (8.0, 12.0, 0.84),
+        "marble_color": (11.0, 18.0, 1.06),
+        "sink_type": (10.0, 16.0, 1.05),
         "marble_edge": (7.5, 11.0, 0.80),
-        "showroom": (8.0, 12.5, 0.84),
+        "showroom": (10.5, 17.0, 1.06),
     }
     weights: list[float] = []
     for item in fields:
@@ -2859,6 +2886,40 @@ class IntegrationCenterDialog(tk.Toplevel):
         self._run_async(f"جاري فحص {path.name} دون استعادتها...", task)
 
 
+
+def filter_dashboard_records(
+    records: list[dict[str, Any]], *, start: Optional[dt.date] = None,
+    end: Optional[dt.date] = None, basis: str = "التاريخ الأنسب",
+    filters: Optional[dict[str, str]] = None,
+) -> list[dict[str, Any]]:
+    """Return exact matching record rows; every matching ID is counted once."""
+    constraints = {
+        key: clean_value(value) for key, value in (filters or {}).items()
+        if clean_value(value) and clean_value(value) != "الكل"
+    }
+    result = []
+    seen_ids: set[str] = set()
+    for record in records:
+        rid = str(record.get("id", ""))
+        if rid and rid in seen_ids:
+            continue
+        record_date = record_date_for_basis(record, basis)
+        if start and (record_date is None or record_date < start):
+            continue
+        if end and (record_date is None or record_date > end):
+            continue
+        values = record.get("values", {})
+        if any(
+            (clean_value(values.get(key, "")) or "غير محدد") != wanted
+            for key, wanted in constraints.items()
+        ):
+            continue
+        result.append(record)
+        if rid:
+            seen_ids.add(rid)
+    return result
+
+
 class OperationsDashboardDialog(tk.Toplevel):
     def __init__(self, parent_app: "MarbleDeliveryApp"):
         super().__init__(parent_app.root)
@@ -2940,6 +3001,50 @@ class OperationsDashboardDialog(tk.Toplevel):
         parent_app.make_button(action_row, "PDF للفترة", lambda: self._export_period("pdf"), self.settings.danger_color, width=10, pady=5).pack(side="left", padx=4)
         parent_app.make_button(action_row, "Excel للفترة", lambda: self._export_period("xlsx"), self.settings.success_color, width=10, pady=5).pack(side="left", padx=4)
 
+
+        # Cross-filters combine as AND. "الكل" includes missing values.
+        dashboard_filters = tk.Frame(controls, bg=self.settings.surface_color)
+        dashboard_filters.pack(fill="x", padx=8, pady=(1, 5))
+        self.dashboard_filter_vars: dict[str, tk.StringVar] = {}
+        self.dashboard_filter_boxes: dict[str, ttk.Combobox] = {}
+        for key, title in (
+            ("marble_color", "لون الرخام"), ("showroom", "المعرض"),
+            ("salesperson", "الموظف"), ("delivery_status", "حالة التسليم"),
+        ):
+            cell = tk.Frame(dashboard_filters, bg=self.settings.surface_color)
+            cell.pack(side="right", padx=5)
+            tk.Label(cell, text=title, bg=self.settings.surface_color,
+                     fg=self.settings.text_color, font=(self.settings.font_family, 9, "bold")).pack(anchor="e")
+            variable = tk.StringVar(value="الكل")
+            combo = ttk.Combobox(cell, textvariable=variable, values=("الكل",),
+                                 state="readonly", width=20)
+            combo.pack()
+            combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
+            self.dashboard_filter_vars[key] = variable
+            self.dashboard_filter_boxes[key] = combo
+
+        extra_row = tk.Frame(controls, bg=self.settings.surface_color)
+        extra_row.pack(fill="x", padx=12, pady=(0, 6))
+        tk.Label(extra_row, text="فلتر إضافي لأي حقل:", bg=self.settings.surface_color,
+                 fg=self.settings.text_color).pack(side="right", padx=5)
+        self.extra_field_var = tk.StringVar(value="بدون")
+        self.extra_value_var = tk.StringVar(value="الكل")
+        self.extra_field_combo = ttk.Combobox(
+            extra_row, textvariable=self.extra_field_var,
+            values=("بدون", *field_labels), state="readonly", width=24,
+        )
+        self.extra_field_combo.pack(side="right", padx=4)
+        self.extra_value_combo = ttk.Combobox(
+            extra_row, textvariable=self.extra_value_var, values=("الكل",),
+            state="readonly", width=23,
+        )
+        self.extra_value_combo.pack(side="right", padx=4)
+        self.extra_field_combo.bind("<<ComboboxSelected>>", lambda _event: self._on_extra_field_change())
+        self.extra_value_combo.bind("<<ComboboxSelected>>", lambda _event: self._refresh())
+        tk.Button(extra_row, text="مسح الفلاتر", bg="#E8EEF2",
+                  fg=self.settings.primary_color, relief="flat",
+                  command=self._clear_dashboard_filters).pack(side="left", padx=5)
+
         self.period_label_var = tk.StringVar()
         tk.Label(
             self, textvariable=self.period_label_var, bg=self.settings.background_color,
@@ -2950,6 +3055,63 @@ class OperationsDashboardDialog(tk.Toplevel):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=14, pady=(0, 14))
         self._refresh()
+
+
+    def _on_extra_field_change(self):
+        self.extra_value_var.set("الكل")
+        self._refresh()
+
+    def _clear_dashboard_filters(self):
+        for variable in self.dashboard_filter_vars.values():
+            variable.set("الكل")
+        self.extra_field_var.set("بدون")
+        self.extra_value_var.set("الكل")
+        self._refresh()
+
+    def _dashboard_sync_filter_choices(self):
+        rows = self.parent_app.records
+        for key, combo in self.dashboard_filter_boxes.items():
+            options = ("الكل", *sorted({
+                clean_value(row.get("values", {}).get(key, "")) or "غير محدد"
+                for row in rows
+            }))
+            combo.configure(values=options)
+            if self.dashboard_filter_vars[key].get() not in options:
+                self.dashboard_filter_vars[key].set("الكل")
+        label = self.extra_field_var.get()
+        key = next((field.key for field in self.settings.visible_fields
+                    if field.label == label), "")
+        options = ("الكل", *sorted({
+            clean_value(row.get("values", {}).get(key, "")) or "غير محدد"
+            for row in rows
+        })) if key else ("الكل",)
+        self.extra_value_combo.configure(values=options)
+        if self.extra_value_var.get() not in options:
+            self.extra_value_var.set("الكل")
+        return key
+
+    def _draw_dashboard_chart(self, canvas: tk.Canvas, counts: Counter):
+        canvas.delete("all")
+        width = max(600, canvas.winfo_width())
+        data = counts.most_common(6)
+        if not data:
+            canvas.create_text(width // 2, 84, text="لا توجد سجلات مطابقة",
+                               fill=self.settings.muted_color, font=(self.settings.font_family, 12))
+            return
+        max_count = max(counts.values())
+        shades = (self.settings.primary_color, self.settings.accent_color,
+                  "#357F9E", self.settings.success_color, "#8473B0", "#4D748B")
+        for index, (name, count) in enumerate(data):
+            y = 14 + index * 29
+            shown = name if len(name) <= 25 else name[:22] + "…"
+            canvas.create_text(width - 14, y + 11, text=shown, anchor="e",
+                               fill=self.settings.text_color, font=(self.settings.font_family, 10))
+            limit = max(80, width - 360)
+            bar_width = max(2, round(limit * count / max_count))
+            canvas.create_rectangle(width - 310 - bar_width, y + 3, width - 310,
+                                    y + 22, fill=shades[index % len(shades)], outline="")
+            canvas.create_text(42, y + 11, text=str(count), anchor="w",
+                               fill=self.settings.text_color, font=(self.settings.font_family, 10, "bold"))
 
     def _record_date(self, record: dict[str, Any]) -> Optional[dt.date]:
         return record_date_for_basis(record, self.date_basis_var.get())
@@ -3023,7 +3185,16 @@ class OperationsDashboardDialog(tk.Toplevel):
         ]:
             tree.heading(key, text=label)
             tree.column(key, width=width, anchor=anchor)
-        tree.pack(fill="both", expand=True, padx=10, pady=10)
+        chart = tk.Canvas(frame, height=194, bg=self.settings.surface_color,
+                          highlightthickness=0, bd=0)
+        chart.pack(fill="x", padx=10, pady=(8, 2))
+        chart.bind("<Configure>", lambda _event, widget=chart, data=counts:
+                   self._draw_dashboard_chart(widget, data))
+        self._draw_dashboard_chart(chart, counts)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
+        scrollbar.pack(side="left", fill="y", padx=(3, 6))
+        tree.configure(yscrollcommand=scrollbar.set)
+        tree.pack(fill="both", expand=True, padx=10, pady=6)
         total = max(1, sum(counts.values()))
         maximum = max(counts.values(), default=1)
         for rank, (name, count) in enumerate(counts.most_common(), 1):
@@ -3048,15 +3219,19 @@ class OperationsDashboardDialog(tk.Toplevel):
         except ValueError as exc:
             messagebox.showwarning("الفترة", str(exc), parent=self)
             return
-        self.filtered_records = []
-        for record in self.parent_app.records:
-            record_date = self._record_date(record)
-            if start and (record_date is None or record_date < start):
-                continue
-            if end and (record_date is None or record_date > end):
-                continue
-            self.filtered_records.append(record)
-        self.period_label_var.set(f"{label} | عدد السجلات: {len(self.filtered_records)}")
+        extra_key = self._dashboard_sync_filter_choices()
+        filters = {key: variable.get() for key, variable in self.dashboard_filter_vars.items()}
+        if extra_key and self.extra_value_var.get() != "الكل":
+            filters[extra_key] = self.extra_value_var.get()
+        self.filtered_records = filter_dashboard_records(
+            self.parent_app.records, start=start, end=end,
+            basis=self.date_basis_var.get(), filters=filters,
+        )
+        total_all = len(self.parent_app.records)
+        self.period_label_var.set(
+            f"{label} | السجلات المطابقة: {len(self.filtered_records)} من {total_all} | "
+            "كل الصفوف المطابقة محسوبة، دون حد أعلى"
+        )
         for child in self.summary.winfo_children():
             child.destroy()
         status_counts = self._counter(self.filtered_records, "delivery_status")
@@ -3065,7 +3240,9 @@ class OperationsDashboardDialog(tk.Toplevel):
         showroom_counts = self._counter(self.filtered_records, "showroom")
         sink_counts = self._counter(self.filtered_records, "sink_type")
         self._add_card("إجمالي الفترة", str(len(self.filtered_records)), self.settings.primary_color)
-        self._add_card("تم التسليم", str(status_counts["تم التسليم"]), self.settings.success_color)
+        completion = (100.0 * status_counts["تم التسليم"] / len(self.filtered_records)
+                      if self.filtered_records else 0.0)
+        self._add_card("تم التسليم", f"{status_counts['تم التسليم']} ({completion:.1f}%)", self.settings.success_color)
         self._add_card("اللون الأعلى", self._top_text(color_counts), "#8A6D2F")
         self._add_card("الموظف الأعلى", self._top_text(employee_counts), "#7655A6")
         self._add_card("الفرع الأعلى", self._top_text(showroom_counts), "#2E6F9E")
@@ -3382,11 +3559,8 @@ class ReportExporter:
         # تحليل البيانات لإنشاء مخططات CSS
         analytics = {}
         for f in fields:
-            if f.key in ["showroom", "marble_color", "salesperson"]:
-                counts = {}
-                for r in records:
-                    val = clean_value(r.get("values", {}).get(f.key, "غير محدد")) or "غير محدد"
-                    counts[val] = counts.get(val, 0) + 1
+            if f.key in {key for key, _ in REPORT_ANALYSIS_DIMENSIONS}:
+                counts = report_dimension_counts(records, f.key)
                 if counts:
                     analytics[f.label] = counts
 
@@ -3433,6 +3607,14 @@ class ReportExporter:
             for page_index, page_records in enumerate(print_chunks)
         )
 
+        print_page_size, _, _, print_orientation = self._resolve_report_page(fields)
+        print_paper = str(s.report_page_size).upper()
+        if print_paper == "CUSTOM":
+            print_width, print_height = self._page_mm(print_page_size)
+            print_paper_css = f"{print_width:.1f}mm {print_height:.1f}mm"
+        else:
+            print_paper_css = f"{'Letter' if print_paper == 'LETTER' else print_paper} {print_orientation}"
+        print_margin = max(3.0, float(s.report_margin_mm))
         html = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -3467,7 +3649,7 @@ tr:hover {{ background: #e9ecef; transition: 0.2s; }}
 .status-revision {{ background: #ffe8a3 !important; font-weight: 700; }}
 .status-postponed {{ background: #fff1cc !important; font-weight: 700; }}
 .status-cancelled {{ background: #fde3e3 !important; font-weight: 700; }}
-@page {{ size: A4 landscape; margin: 3mm 2.5mm; }}
+@page {{ size: {print_paper_css}; margin: {print_margin:g}mm; }}
 @media print {{
   .search-box, .chart-container, .screen-report, .screen-only, .container > .header, .container > .footer {{ display: none !important; }}
   .print-only {{ display: block; }}
@@ -3552,11 +3734,14 @@ function filterTable() {{
         ws.print_title_rows = "6:6"
 
         count = len(fields)
-        use_portrait = count <= 4
+        _, _, _, direction = self._resolve_report_page(fields)
+        use_portrait = direction == "portrait"
         ws.sheet_properties.pageSetUpPr.fitToPage = True
         ws.sheet_properties.pageSetUpPr.autoPageBreaks = False
         ws.page_setup.orientation = "portrait" if use_portrait else "landscape"
-        ws.page_setup.paperSize = ws.PAPERSIZE_A4
+        ws.page_setup.paperSize = {
+            "A3": ws.PAPERSIZE_A3, "LETTER": ws.PAPERSIZE_LETTER,
+        }.get(str(self.settings.report_page_size).upper(), ws.PAPERSIZE_A4)
         ws.page_setup.fitToWidth = 1
         # صفحة واحدة عرضًا، وعدد غير محدود من الصفحات إلى الأسفل.
         ws.page_setup.fitToHeight = 0
@@ -3754,8 +3939,52 @@ function filterTable() {{
         ws.page_margins.header = 0.03
         ws.page_margins.footer = 0.03
         self._add_excel_summary(wb, ws, records, fields, palette)
+        self._add_excel_full_analysis(wb, records, fields, palette)
         output.parent.mkdir(parents=True, exist_ok=True)
         wb.save(output)
+
+    def _add_excel_full_analysis(
+        self, workbook: Any, records: list[dict[str, Any]],
+        fields: list[FieldDefinition], palette: dict[str, str],
+    ) -> None:
+        """Every distinct field value, share, and explicit missing count."""
+        sheet = workbook.create_sheet("تفاصيل التحليل")
+        sheet.sheet_view.rightToLeft = True
+        sheet.sheet_view.showGridLines = False
+        sheet.freeze_panes = "A3"
+        sheet.sheet_properties.pageSetUpPr.fitToPage = True
+        sheet.page_setup.orientation = "landscape"
+        sheet.page_setup.fitToWidth = 1
+        sheet.page_setup.fitToHeight = 0
+        sheet.append(["تحليل كامل مطابق للسجلات المصدّرة، دون اختصار"])
+        sheet.append(["الحقل", "القيمة الفعلية", "عدد السجلات", "النسبة", "الموجود", "غير المحدد"])
+        sheet.merge_cells("A1:F1")
+        sheet["A1"].font = Font(name=self.settings.font_family, size=15, bold=True,
+                                color=palette["title_text"].lstrip("#"))
+        sheet["A1"].fill = PatternFill("solid", fgColor=palette["title_fill"].lstrip("#"))
+        sheet["A1"].alignment = Alignment(horizontal="center")
+        for cell in sheet[2]:
+            cell.font = Font(name=self.settings.font_family, size=11, bold=True,
+                             color=palette["header_text"].lstrip("#"))
+            cell.fill = PatternFill("solid", fgColor=palette["header_fill"].lstrip("#"))
+            cell.alignment = Alignment(horizontal="center")
+        present = {field.key: field.label for field in fields}
+        total = len(records)
+        for key, label in REPORT_ANALYSIS_DIMENSIONS:
+            if key not in present:
+                continue
+            overview = report_dimension_summary(records, key)
+            for value, count in overview["counts"].items():
+                sheet.append([present[key] or label, value, count,
+                              count / total if total else 0,
+                              total - overview["missing"], overview["missing"]])
+                sheet.cell(sheet.max_row, 4).number_format = "0.00%"
+        sheet.auto_filter.ref = f"A2:F{max(2, sheet.max_row)}"
+        for col, width in {"A": 25, "B": 35, "C": 19, "D": 12, "E": 18, "F": 18}.items():
+            sheet.column_dimensions[col].width = width
+        sheet.print_title_rows = "1:2"
+        sheet.print_area = f"A1:F{max(2, sheet.max_row)}"
+
 
     def _add_excel_summary(self, workbook: Any, data_sheet: Any, records: list[dict[str, Any]],
                            fields: list[FieldDefinition], palette: dict[str, str]) -> None:
@@ -3818,11 +4047,8 @@ function filterTable() {{
         for key, label, start_col, header_row in blocks:
             if key not in field_columns:
                 continue
-            counts: dict[str, int] = {}
-            for record in records:
-                value = clean_value(record.get("values", {}).get(key, "")) or "غير محدد"
-                counts[value] = counts.get(value, 0) + 1
-            top_items = sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))[:8]
+            counts = report_dimension_counts(records, key)
+            top_items = list(counts.items())[:8]
             summary.cell(header_row, start_col, label)
             summary.cell(header_row, start_col + 1, "عدد السجلات")
             for cell in summary.iter_cols(min_col=start_col, max_col=start_col + 1, min_row=header_row, max_row=header_row):
@@ -3830,10 +4056,9 @@ function filterTable() {{
                     header_cell.font = Font(name=self.settings.font_family, size=11, bold=True, color=palette["header_text"].lstrip("#"))
                     header_cell.fill = PatternFill("solid", fgColor=palette["header_fill"].lstrip("#"))
                     header_cell.alignment = Alignment(horizontal="center")
-            data_col_letter = get_column_letter(field_columns[key])
-            for offset, (category, _count) in enumerate(top_items, header_row + 1):
+            for offset, (category, actual_count) in enumerate(top_items, header_row + 1):
                 summary.cell(offset, start_col, category)
-                summary.cell(offset, start_col + 1, f'=COUNTIF(\'{data_sheet.title}\'!${data_col_letter}${first_data_row}:${data_col_letter}${last_data_row},{get_column_letter(start_col)}{offset})')
+                summary.cell(offset, start_col + 1, actual_count)
                 for col in (start_col, start_col + 1):
                     cell = summary.cell(offset, col)
                     cell.font = Font(name=self.settings.font_family, size=10, color=palette["text"].lstrip("#"))
@@ -4120,7 +4345,7 @@ function filterTable() {{
         doc = SimpleDocTemplate(
             str(output), pagesize=page_size,
             rightMargin=side_margin, leftMargin=side_margin,
-            topMargin=39*mm, bottomMargin=24*mm,
+            topMargin=34*mm, bottomMargin=17*mm,
             title=f"{self.settings.report_title} - {self.settings.report_title_en}",
             author=self.settings.company_name,
         )
@@ -4129,16 +4354,32 @@ function filterTable() {{
         reference = report_reference(records, now)
         metrics = report_record_metrics(records)
 
+        dimension_summaries = {
+            key: report_dimension_summary(records, key)
+            for key, _ in REPORT_ANALYSIS_DIMENSIONS
+        }
+
         def build_meta(page_records: list[dict[str, Any]]) -> Table:
-            page_w_mm, page_h_mm = self._page_mm(page_size)
+            def top_label(key: str, caption: str) -> str:
+                summary = dimension_summaries[key]
+                name, count = summary["leader"]
+                return f"{caption}: {name} ({count}) | غير محدد {summary['missing']}"
             meta = Table(
-                [[
-                    para(f"السجلات: {metrics['records']}", right_style),
-                    para(f"العقود: {metrics['contracts']}", right_style),
-                    para(f"العقود المتكررة: {metrics['multi_kitchen_contracts']}", right_style),
-                    para(f"هذه الصفحة: {len(page_records)} | {now:%Y-%m-%d}", right_style),
-                ]],
-                colWidths=[available_width/4] * 4,
+                [
+                    [
+                        para(f"السجلات: {metrics['records']}", right_style),
+                        para(f"العقود: {metrics['contracts']}", right_style),
+                        para(f"العقود المتكررة: {metrics['multi_kitchen_contracts']}", right_style),
+                        para(f"هذه الصفحة: {len(page_records)} | {now:%Y-%m-%d}", right_style),
+                    ],
+                    [
+                        para(top_label("marble_color", "اللون"), right_style),
+                        para(top_label("sink_type", "المجلى"), right_style),
+                        para(top_label("salesperson", "الموظف"), right_style),
+                        para(top_label("showroom", "المعرض"), right_style),
+                    ],
+                ],
+                colWidths=[available_width / 4] * 4,
             )
             meta.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F0F3F5")),
@@ -4146,8 +4387,8 @@ function filterTable() {{
                 ("LINEBELOW", (0, 0), (-1, -1), 1.0, accent),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("TOPPADDING", (0, 0), (-1, -1), 5.0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5.0),
+                ("TOPPADDING", (0, 0), (-1, -1), 3.2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3.2),
             ]))
             return meta
 
@@ -4192,7 +4433,7 @@ function filterTable() {{
                 table_data, colWidths=col_widths, repeatRows=1,
                 hAlign="CENTER", splitByRow=0,
             )
-            cell_padding = max(4.4, font_size * 0.50)
+            cell_padding = max(3.0, font_size * 0.40)
             style_commands = [
                 ("BACKGROUND", (0, 0), (-1, 0), header_fill),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
@@ -4234,7 +4475,7 @@ function filterTable() {{
         def fit_chunk(page_records: list[dict[str, Any]]):
             meta = build_meta(page_records)
             _, meta_height = meta.wrap(available_width, doc.height)
-            table_height_limit = doc.height - meta_height - 3*mm - 14
+            table_height_limit = doc.height - meta_height - 2*mm - 11
             candidate = preferred_font_size
             while candidate >= minimum_font_size - 0.01:
                 table = build_page_table(page_records, candidate)
@@ -4267,22 +4508,22 @@ function filterTable() {{
         def draw_page(canvas, doc):
             canvas.saveState()
             canvas.setFillColor(title_fill)
-            canvas.rect(0, page_height - 22*mm, page_width, 22*mm, stroke=0, fill=1)
+            canvas.rect(0, page_height - 17*mm, page_width, 17*mm, stroke=0, fill=1)
             canvas.setFillColor(subtitle_fill)
-            canvas.rect(0, page_height - 35*mm, page_width, 13*mm, stroke=0, fill=1)
+            canvas.rect(0, page_height - 30*mm, page_width, 13*mm, stroke=0, fill=1)
             canvas.setFillColor(accent)
-            canvas.rect(0, page_height - 36*mm, page_width, 1.3*mm, stroke=0, fill=1)
+            canvas.rect(0, page_height - 30.6*mm, page_width, 0.8*mm, stroke=0, fill=1)
 
-            title_size = 24 if str(self.settings.report_page_size).upper() == "A4" else 27
+            title_size = 19 if str(self.settings.report_page_size).upper() == "A4" else 23
             canvas.setFont(bold_name, title_size)
             canvas.setFillColor(title_text)
-            canvas.drawCentredString(page_width/2, page_height - 10*mm, shape_arabic(self.settings.report_title))
+            canvas.drawCentredString(page_width/2, page_height - 8*mm, shape_arabic(self.settings.report_title))
             canvas.setFont(bold_name, 11.0)
-            canvas.drawCentredString(page_width/2, page_height - 18*mm, self.settings.report_title_en)
+            canvas.drawCentredString(page_width/2, page_height - 15*mm, self.settings.report_title_en)
             canvas.setFont(regular_name, 11.5)
             canvas.setFillColor(subtitle_text)
             canvas.drawCentredString(
-                page_width/2, page_height - 29*mm,
+                page_width/2, page_height - 24*mm,
                 shape_arabic(f"{self.settings.company_name} | {self.settings.report_subtitle}")
             )
 
@@ -4290,8 +4531,8 @@ function filterTable() {{
                 try:
                     logo_width = max(15, min(60, int(self.settings.logo_width_mm))) * mm
                     canvas.drawImage(
-                        self.settings.logo_path, side_margin, page_height - 31*mm,
-                        width=logo_width, height=min(27*mm, logo_width * 0.72),
+                        self.settings.logo_path, side_margin, page_height - 26*mm,
+                        width=logo_width, height=min(20*mm, logo_width * 0.72),
                         preserveAspectRatio=True, mask="auto"
                     )
                 except Exception:
@@ -4313,30 +4554,30 @@ function filterTable() {{
                     transform=[qr_size/(x2-x1), 0, 0, qr_size/(y2-y1), 0, 0]
                 )
                 qr_drawing.add(qr_widget)
-                renderPDF.draw(qr_drawing, canvas, page_width - side_margin - qr_size, page_height - 22*mm)
+                renderPDF.draw(qr_drawing, canvas, page_width - side_margin - qr_size, page_height - 20*mm)
             except Exception:
                 logging.exception("تعذر إضافة رمز التحقق إلى PDF")
 
             canvas.setFont(regular_name, 9.2)
             canvas.setFillColor(text_color)
             canvas.drawRightString(
-                page_width - side_margin, 20*mm,
+                page_width - side_margin, 13*mm,
                 shape_arabic(f"اسم المستلم: {clean_value(recipient) or '........................'}"),
             )
-            canvas.drawCentredString(page_width/2, 20*mm, shape_arabic("التوقيع: ........................"))
-            canvas.drawString(side_margin, 20*mm, shape_arabic(f"التاريخ: {now:%Y-%m-%d}"))
+            canvas.drawCentredString(page_width/2, 13*mm, shape_arabic("التوقيع: ........................"))
+            canvas.drawString(side_margin, 13*mm, shape_arabic(f"التاريخ: {now:%Y-%m-%d}"))
             canvas.setStrokeColor(accent)
-            canvas.line(side_margin, 16*mm, page_width - side_margin, 16*mm)
+            canvas.line(side_margin, 10*mm, page_width - side_margin, 10*mm)
 
             canvas.setStrokeColor(border_color)
-            canvas.line(side_margin, 11*mm, page_width - side_margin, 11*mm)
+            canvas.line(side_margin, 7*mm, page_width - side_margin, 7*mm)
             canvas.setFont(regular_name, 8.2)
             canvas.setFillColor(muted)
-            canvas.drawRightString(page_width - side_margin, 6*mm, shape_arabic(self.settings.footer_note))
-            canvas.drawString(side_margin, 6*mm, shape_arabic(f"صفحة {doc.page} من {total_pages}"))
+            canvas.drawRightString(page_width - side_margin, 3*mm, shape_arabic(self.settings.footer_note))
+            canvas.drawString(side_margin, 3*mm, shape_arabic(f"صفحة {doc.page} من {total_pages}"))
             page_w_mm, page_h_mm = self._page_mm(page_size)
             canvas.drawCentredString(
-                page_width/2, 6*mm,
+                page_width/2, 3*mm,
                 f"REF: {reference} | {page_w_mm:.0f}x{page_h_mm:.0f} mm | {orientation.upper()}"
             )
             canvas.restoreState()
@@ -4346,11 +4587,11 @@ function filterTable() {{
             meta = build_meta(page_records)
             table = build_page_table(page_records, font_size)
             logging.info(
-                "PDF v10.0.4 page %s/%s: %s rows, font %.2f pt, %s %s",
+                "PDF v10.0.7 page %s/%s: %s rows, font %.2f pt, %s %s",
                 page_index + 1, total_pages, len(page_records), font_size,
                 self.settings.report_page_size, orientation,
             )
-            story.extend([meta, Spacer(1, 3*mm), table])
+            story.extend([meta, Spacer(1, 2*mm), table])
             if page_index < total_pages - 1:
                 story.append(PageBreak())
         doc.build(story, onFirstPage=draw_page, onLaterPages=draw_page)
@@ -5246,19 +5487,11 @@ class ExportOptionsDialog(tk.Toplevel):
         if not fields:
             messagebox.showwarning("تنبيه", "اختر حقلًا واحدًا على الأقل للمعاينة.", parent=self)
             return
-        preview_path = PREVIEW_DIR / "معاينة_تقرير_تسليم_الرخام.pdf"
-        progress = ProgressDialog(self.parent_app, "جاري تجهيز المعاينة...")
-        try:
-            ReportExporter(self.settings).export_pdf(
-                records, self.parent_app.recipient_var.get(), preview_path, fields
-            )
-            open_with_default_app(preview_path)
-            self.parent_app.status_var.set("تم فتح معاينة PDF")
-        except Exception as exc:
-            logging.exception("فشلت معاينة التقرير")
-            messagebox.showerror("تعذر فتح المعاينة", str(exc), parent=self)
-        finally:
-            progress.close()
+        preview_path = PREVIEW_DIR / f"معاينة_تقرير_تسليم_الرخام_{dt.datetime.now():%Y%m%d_%H%M%S_%f}.pdf"
+        self.parent_app._start_export_task(
+            "pdf", records, self.parent_app.recipient_var.get(), fields, preview_path,
+            after_success=open_with_default_app, show_success=False, archive=False,
+        )
 
     def _export(self):
         records = self._get_records()
@@ -5684,8 +5917,8 @@ class SettingsDialog(tk.Toplevel):
                  fg=self.settings.muted_color).grid(row=4, column=0, sticky="e", padx=16, pady=(0, 6))
         tk.Checkbutton(dialog, text="إظهار الحقل", variable=visible_var, bg=self.settings.surface_color,
                        fg=self.settings.text_color, anchor="e").grid(row=5, column=0, columnspan=2, sticky="e", padx=16, pady=6)
-        tk.Checkbutton(dialog, text="مطلوب", variable=required_var, bg=self.settings.surface_color,
-                       fg=self.settings.text_color, anchor="e").grid(row=6, column=0, columnspan=2, sticky="e", padx=16, pady=6)
+        tk.Label(dialog, text="جميع الحقول اختيارية ويمكن تعديلها لاحقًا", bg=self.settings.surface_color,
+                 fg=self.settings.muted_color, anchor="e").grid(row=6, column=0, columnspan=2, sticky="e", padx=16, pady=6)
         dialog.grid_columnconfigure(0, weight=1)
 
         def save():
@@ -5703,7 +5936,7 @@ class SettingsDialog(tk.Toplevel):
             item.label = label
             item.width = width
             item.visible = visible_var.get()
-            item.required = required_var.get()
+            item.required = False  # All delivery data is optional.
             item.kind = kind_var.get()
             item.options = [clean_value(value) for value in re.split(r"[,،\n]", options_var.get()) if clean_value(value)]
             if item.kind == "choice" and not item.options:
@@ -6354,6 +6587,22 @@ class MarbleDeliveryApp:
         if self.root.winfo_width() < 1250 and self.sidebar_visible:
             self.toggle_sidebar(manual=False)
             self.status_var.set("تم تفعيل التخطيط المدمج تلقائياً لملاءمة حجم الشاشة")
+        holders = getattr(self, "_form_holders", [])
+        fields_frame = getattr(self, "_form_fields_frame", None)
+        if not holders or fields_frame is None or not fields_frame.winfo_exists():
+            return
+        available = max(600, self.main_frame.winfo_width())
+        columns = max(2, min(6, available // 235))
+        if columns == self._form_field_columns:
+            return
+        for holder in holders:
+            holder.grid_forget()
+        for column in range(6):
+            fields_frame.grid_columnconfigure(column, weight=1 if column < columns else 0)
+        for index, holder in enumerate(holders):
+            holder.grid(row=index // columns, column=columns - 1 - (index % columns),
+                        sticky="ew", padx=3, pady=1)
+        self._form_field_columns = columns
 
     def _build_stats(self, parent):
         s = self.settings
@@ -6676,13 +6925,25 @@ class MarbleDeliveryApp:
                                    font=(s.font_family, 9, "bold"))
         self.mode_label.pack(side="left")
         tk.Label(
-            top, text="Enter: حفظ وفتح سجل جديد  |  Tab: الحقل التالي  |  Esc: تراجع",
+            top, text="Enter/Tab: التالي  |  Shift+Enter: السابق  |  Ctrl+Enter: حفظ",
             bg=s.surface_color, fg=s.muted_color, font=(s.font_family, 8),
         ).pack(side="left", padx=12)
 
+        form_actions = tk.Frame(card, bg=s.surface_color)
+        form_actions.pack(fill="x", padx=6, pady=(0, 2))
+        for caption, action, color in (
+            ("السابق", lambda: self._focus_adjacent_entry(-1), s.muted_color),
+            ("التالي", lambda: self._focus_adjacent_entry(1), s.primary_color),
+            ("حفظ التغييرات", self.save_or_update_record, s.success_color),
+        ):
+            tk.Button(form_actions, text=caption, command=action, bg=color, fg="white",
+                      relief="flat", font=(s.font_family, 9, "bold"), padx=8, pady=2).pack(side="right", padx=3)
         fields_frame = tk.Frame(card, bg=s.surface_color)
         fields_frame.pack(fill="x", padx=4, pady=0)
-        field_columns = 6 if self.root.winfo_screenwidth() >= 1200 else 4
+        field_columns = max(2, min(6, max(800, self.root.winfo_width()) // 235))
+        self._form_field_columns = field_columns
+        self._form_fields_frame = fields_frame
+        self._form_holders: list[tk.Frame] = []
         for col in range(field_columns):
             fields_frame.grid_columnconfigure(col, weight=1)
         self.entries = {}
@@ -6693,6 +6954,7 @@ class MarbleDeliveryApp:
             col = (field_columns - 1) - (idx % field_columns)
             holder = tk.Frame(fields_frame, bg=s.surface_color)
             holder.grid(row=row, column=col, sticky="ew", padx=3, pady=1)
+            self._form_holders.append(holder)
             marker = " *" if item.required else ""
             tk.Label(holder, text=f"{item.label}{marker}", bg=s.surface_color,
                      fg=s.text_color, anchor="e", font=(s.font_family, 8, "bold")).pack(fill="x")
@@ -6727,6 +6989,8 @@ class MarbleDeliveryApp:
             entry.bind("<KeyPress>", self._capture_form_undo, add="+")
             entry.bind("<Button-1>", self._capture_form_undo, add="+")
             entry.bind("<Return>", lambda event, index=idx: self._handle_enter(event, index))
+            entry.bind("<Control-Return>", self._handle_ctrl_enter)
+            entry.bind("<Control-KP_Enter>", self._handle_ctrl_enter)
             entry.bind("<KP_Enter>", lambda event, index=idx: self._handle_enter(event, index))
             entry.bind("<Shift-Return>", lambda event, index=idx: self._handle_shift_enter(event, index))
             entry.bind("<KeyRelease>", self._schedule_record_autosave, add="+")
@@ -6735,6 +6999,12 @@ class MarbleDeliveryApp:
                 entry.bind("<<ComboboxSelected>>", self._schedule_record_autosave, add="+")
             self.entries[item.key] = entry
 
+
+    def _focus_adjacent_entry(self, delta: int):
+        focused = self.root.focus_get()
+        order = [self.entries[key] for key in self._entry_order if key in self.entries]
+        index = next((i for i, entry in enumerate(order) if entry is focused), 0)
+        self._focus_entry_index(index + delta)
 
     def _focus_entry_index(self, index: int):
         if not self._entry_order:
@@ -6751,8 +7021,12 @@ class MarbleDeliveryApp:
             pass
 
     def _handle_enter(self, _event, index: int):
-        """Enter يعتمد السجل الحالي ثم يفتح نموذجًا جديدًا جاهزًا للإدخال."""
-        self.save_and_start_new_record()
+        """Enter navigates safely; only explicit actions save/new."""
+        self._focus_entry_index(index + 1)
+        return "break"
+
+    def _handle_ctrl_enter(self, _event=None):
+        self.save_or_update_record()
         return "break"
 
     def _handle_shift_enter(self, _event, index: int):
@@ -7159,8 +7433,6 @@ class MarbleDeliveryApp:
         errors = []
         for f in self.settings.visible_fields:
             val = clean_value(values.get(f.key, ""))
-            if f.required and not val:
-                errors.append(f"حقل «{f.label}» مطلوب.")
             if f.kind == "phone" and val:
                 digits = re.sub(r"\D", "", val)
                 if not re.fullmatch(r"[+\d\s()\-]+", val) or not 7 <= len(digits) <= 15:
@@ -7245,8 +7517,6 @@ class MarbleDeliveryApp:
     def _values_ready_for_autosave(self, values: dict[str, Any]) -> bool:
         for item in self.settings.visible_fields:
             value = clean_value(values.get(item.key, ""))
-            if item.required and not value:
-                return False
             if item.kind == "date" and value:
                 try:
                     dt.datetime.strptime(value, "%Y-%m-%d")
@@ -7268,6 +7538,9 @@ class MarbleDeliveryApp:
             if not clean_value(values.get("delivery_status", "")):
                 values["delivery_status"] = "جديد"
             current = self._record_by_id(self.selected_record_id) if self.selected_record_id else None
+            if current is None and not self._has_user_form_data():
+                DatabaseManager.save_session_state(self._session_payload(), clean_shutdown=False)
+                return False  # Never create empty rows due to default status/focus.
             if current is None:
                 ensure_kitchen_identity(values, self.records)
             if values.get("delivery_status") == "تم التسليم" and not values.get("actual_delivery_date"):
@@ -7338,9 +7611,8 @@ class MarbleDeliveryApp:
         was_editing = bool(self.selected_record_id)
         if not self.save_or_update_record():
             return False
-        if was_editing:
-            self.clear_form()
-            self._apply_filters()
+        self.clear_form()  # This action explicitly requests a new record.
+        self._apply_filters()
         self.status_var.set("تم اعتماد السجل وفتح سجل جديد جاهز للإدخال")
         return True
 
@@ -7391,6 +7663,9 @@ class MarbleDeliveryApp:
             values["delivery_status"] = "جديد"
         if values.get("delivery_status") == "تم التسليم" and not values.get("actual_delivery_date"):
             values["actual_delivery_date"] = dt.date.today().isoformat()
+        if not self._has_user_form_data():
+            messagebox.showinfo("حفظ السجل", "أدخل أي معلومة واحدة على الأقل لإنشاء سجل.", parent=self.root)
+            return False
         ensure_kitchen_identity(values, self.records)
         if not self._validate_and_confirm_duplicate(values):
             return False
@@ -7398,8 +7673,13 @@ class MarbleDeliveryApp:
         rec = {"id": uuid.uuid4().hex, "created_at": now, "updated_at": now, "values": values}
         if not self._persist_record(rec):
             return False
+        self.selected_record_id = rec["id"]
+        self._last_record_snapshot = f"{rec['id']}:" + json.dumps(values, ensure_ascii=False, sort_keys=True)
         self._form_undo_stack.clear()
-        self.clear_form()
+        if hasattr(self, "tree") and self.tree.exists(rec["id"]):
+            self.tree.selection_set(rec["id"])
+            self.tree.see(rec["id"])
+        self.mode_label.configure(text="تم الحفظ - قابل للتعديل", fg=self.settings.success_color)
         self._apply_filters()
         return True
 
@@ -7531,7 +7811,7 @@ class MarbleDeliveryApp:
             )
             return "break"
 
-        required_keys = {item.key for item in self.settings.visible_fields if item.required}
+        required_keys: set[str] = set()  # Optional fields: accept partially populated imports.
         accepted: list[dict[str, Any]] = []
         skipped = 0
         now = dt.datetime.now().isoformat(timespec="seconds")
@@ -7556,7 +7836,7 @@ class MarbleDeliveryApp:
         if not accepted:
             messagebox.showinfo(
                 "لصق السجلات",
-                "لم تُلصق سجلات؛ تأكد من وجود رقم العقد واسم العميل ورقم الجوال في كل صف.",
+                "لم تُلصق سجلات؛ تأكد من وجود صف بيانات واحد على الأقل.",
                 parent=self.root,
             )
             return "break"
@@ -7713,7 +7993,7 @@ class MarbleDeliveryApp:
 
     # ==================== دوال التصدير ====================
     def _start_export_task(self, file_type, records, recipient, selected_fields, output_path,
-                           *, after_success=None, show_success=True):
+                           *, after_success=None, show_success=True, archive=True):
         """يشغّل إنشاء التقارير بعيداً عن واجهة Tk حتى تبقى مستجيبة."""
         output_path = Path(output_path)
         records_snapshot = copy.deepcopy(list(records))
@@ -7728,9 +8008,10 @@ class MarbleDeliveryApp:
                 method = getattr(exporter, EXPORT_METHOD_NAMES[file_type])
                 generated = method(records_snapshot, recipient, output_path, fields_snapshot)
                 generated_paths = [Path(item) for item in generated] if isinstance(generated, (list, tuple)) else [output_path]
-                DatabaseManager.archive_report(
-                    output_path, file_type, settings_snapshot, recipient, records_snapshot, fields_snapshot
-                )
+                if archive:
+                    DatabaseManager.archive_report(
+                        output_path, file_type, settings_snapshot, recipient, records_snapshot, fields_snapshot
+                    )
                 self.root.after(0, lambda paths=generated_paths: finish(None, paths))
             except Exception as exc:
                 logging.exception("فشل التصدير")
@@ -7782,7 +8063,7 @@ class MarbleDeliveryApp:
         output = PREVIEW_DIR / f"معاينة_تقرير_تسليم_الرخام_{dt.datetime.now():%Y%m%d_%H%M%S}.pdf"
         self._start_export_task(
             "pdf", self.filtered_records, self.recipient_var.get(), fields, output,
-            after_success=open_with_default_app, show_success=False,
+            after_success=open_with_default_app, show_success=False, archive=False,
         )
 
     def print_current_report(self):

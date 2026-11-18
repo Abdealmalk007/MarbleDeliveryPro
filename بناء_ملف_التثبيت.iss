@@ -1,6 +1,6 @@
-﻿#define MyAppName "نظام تسليم الرخام الاحترافي"
+#define MyAppName "نظام تسليم الرخام الاحترافي"
 #define MyAppNameEn "Marble Delivery Pro"
-#define MyAppVersion "10.0.5"
+#define MyAppVersion "10.0.7"
 #define MyAppExeName "MarbleDeliveryPro.exe"
 #define BuildRoot "build\MarbleDeliveryPro"
 #define OutputRoot "dist"
@@ -11,7 +11,7 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher=ProTech
-VersionInfoVersion=10.0.5.0
+VersionInfoVersion=10.0.7.0
 VersionInfoCompany=ProTech
 VersionInfoDescription=Professional marble delivery management and reporting system
 VersionInfoProductName={#MyAppNameEn}
@@ -23,7 +23,7 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputRoot}
-OutputBaseFilename=Setup_MarbleDeliveryPro_v10.0.5
+OutputBaseFilename=Setup_MarbleDeliveryPro_v10.0.7
 SetupIconFile=app_icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64

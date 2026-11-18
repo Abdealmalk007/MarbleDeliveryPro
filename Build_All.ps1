@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
-$Version = '10.0.5'
+$Version = '10.0.7'
 $BuildDir = Join-Path $Root '.build'
 $EnvDir = Join-Path $Root '.build-venv'
 $BinDir = Join-Path $Root 'build'

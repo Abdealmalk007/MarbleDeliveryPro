@@ -1,11 +1,4 @@
-# MarbleDeliveryPro 10.0.5 — النسخة العامة
-
-> **Current license / الترخيص الحالي: All Rights Reserved.**
-> © 2026 Abu Omar / ProTech. Prior written permission is required for use,
-> copying, modification, publication or distribution of current ProTech-owned material.
-> جميع الحقوق محفوظة. يلزم إذن كتابي مسبق للاستخدام أو النسخ أو التعديل أو التوزيع.
-> Third-party licenses and previously distributed MIT copies remain unaffected.
-> See [LICENSE](LICENSE) and [licensing transition](LICENSING_TRANSITION.md).
+# MarbleDeliveryPro 10.0.7 — النسخة العامة
 
 **المطور:** Abu Omar / ProTech  
 **النظام:** Windows x64  
@@ -31,11 +24,11 @@
 - تكاملات اختيارية مع أنظمة خارجية.
 
 ## التحميل والإعداد
-- **Setup:** ملف `Setup_MarbleDeliveryPro_v10.0.5.exe`.
-- **Portable:** ملف `MarbleDeliveryPro_v10.0.5_Portable.zip`.
+- **Setup:** ملف `Setup_MarbleDeliveryPro_v10.0.7.exe`.
+- **Portable:** ملف `MarbleDeliveryPro_v10.0.7_Portable.zip`.
 - **Source:** شيفرة Python ومهام البناء والاختبارات.
 
-لا تنقل إلى GitHub قاعدة البيانات أو ملفات `backups` أو `attachments` أو السجلات. افحص الملف `SHA256_v10.0.5.txt` للتحقق من سلامة ملفات الإصدار.
+لا تنقل إلى GitHub قاعدة البيانات أو ملفات `backups` أو `attachments` أو السجلات. افحص الملف `SHA256_v10.0.7.txt` للتحقق من سلامة ملفات الإصدار.
 
 ## النشر على GitHub
 بعد التحقق من ملفات الإصدار، ثبت GitHub CLI ونفذ `gh auth login`، ثم شغّل `PUBLISH_GITHUB.ps1`. يتطلب الأمر كتابة `PUBLISH` لتأكيد إنشاء مستودع عام ونشر ملفات الإصدار، ولا يتم النشر تلقائيًا دون الموافقة.

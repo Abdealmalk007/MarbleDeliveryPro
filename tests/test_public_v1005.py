@@ -6,7 +6,7 @@ from test_v1005 import app_module
 
 class PublicReleaseRegression(unittest.TestCase):
     def test_clean_company_profile(self):
-        self.assertEqual(app_module.APP_VERSION, "10.0.5")
+        self.assertEqual(app_module.APP_VERSION, "10.0.7")
         self.assertEqual(app_module.AppSettings().company_name, "")
 
     def test_empty_password_is_never_valid(self):

@@ -20,7 +20,7 @@ _spec.loader.exec_module(app_module)
 
 class SourceRegression(unittest.TestCase):
     def test_source_version_and_schema(self):
-        self.assertEqual(app_module.APP_VERSION, '10.0.5')
+        self.assertEqual(app_module.APP_VERSION, '10.0.7')
         self.assertEqual(app_module.SCHEMA_VERSION, 14)
         with app_module.get_db() as conn:
             self.assertEqual(conn.execute('PRAGMA quick_check').fetchone()[0], 'ok')
